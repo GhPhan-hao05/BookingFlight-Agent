@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 import os
 import re
-os.environ["OPENAI_API_KEY"]= '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'
+os.environ["OPENAI_API_KEY"]= '[YOUR OPENAI API KEY]'
 
 
     
