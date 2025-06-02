@@ -10,7 +10,7 @@ from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.core import Settings
 from llama_index.core.chat_engine  import SimpleChatEngine
 from llama_index.core.llms import ChatMessage, MessageRole
-OPENAI_API_KEY  = os.environ["OPENAI_API_KEY"]= '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'
+OPENAI_API_KEY  = os.environ["OPENAI_API_KEY"]= '[YOUR OPENAI API KEY]'
 from web2 import *
 
 class LlamaIndexTaskAgentWithSearch:
