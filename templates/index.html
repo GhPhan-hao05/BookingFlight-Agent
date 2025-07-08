@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Chatbot Flight</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            width: 60%;
+            margin: auto;
+            padding-top: 30px;
+        }
+
+        .chat-box {
+            border: 1px solid #ccc;
+            padding: 20px;
+            height: 400px;
+            overflow-y: scroll;
+        }
+
+        .user {
+            color: blue;
+        }
+
+        .assistant {
+            color: green;
+        }
+
+        .form-box {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>✈️ Travel Assistant Chatbot</h2>
+
+    <div class="chat-box" id="chat-box"></div>
+
+    <div class="form-box">
+        <form id="chat-form">
+            <input type="text" id="user-input" style="width: 80%;" required>
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <div class="right">
+        <h3>🛫 Chuyến bay</h3>
+        <div id="flight-results"></div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const form = document.getElementById("chat-form");
+            const input = document.getElementById("user-input");
+            const chatBox = document.getElementById("chat-box");
+            const flightBox = document.getElementById("flight-results");
+
+
+            function appendMessage(sender, text) {
+                const p = document.createElement("p");
+                p.className = sender === "user" ? "user" : "assistant";
+                p.innerHTML = `<strong>${sender === "user" ? "You" : "Bot"}:</strong> ${text}`;
+                chatBox.appendChild(p);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            function renderFlights(flights) {
+                console.log("Rendering flights:", flights); // 🔍 DEBUG
+
+                flightBox.innerHTML = "";
+                flights.forEach(flight => {
+                    const card = document.createElement("div");
+                    card.className = "flight-card";
+                    card.innerHTML = `
+                    <strong>${flight.hang_bay}</strong><br>
+                    ${flight.san_bay_di} → ${flight.san_bay_den}<br>
+                    🕐 ${flight.gio_khoi_hanh} <br>
+                    💰 ${flight.gia}
+                `;
+                    card.addEventListener("click", () => {
+                        const msg = `Tôi chọn chuyến bay hãng ${flight.hang_bay} từ ${flight.san_bay_di} đến ${flight.san_bay_den} lúc ${flight.gio_khoi_hanh}`;
+                        sendMessage(msg);
+                    });
+                    flightBox.appendChild(card);
+                });
+            }
+
+            async function loadFlights() {
+                try {
+                    const res = await fetch("/static/flight_results.json");  // ensure file is in /static
+                    const flights = await res.json();
+                    renderFlights(flights);
+                } catch (e) {
+                    console.error("❌ Không thể tải dữ liệu chuyến bay.");
+                }
+            }
+
+
+            async function sendMessage(text) {
+                appendMessage("user", text);
+                input.value = "";
+
+                try {
+                    const response = await fetch("/chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ message: text })
+                    });
+
+                    const data = await response.json();
+                    console.log("Chat response:", data);  // DEBUG
+
+                    appendMessage("assistant", data.reply);
+
+                    if (data.show_flights == true) {
+
+                        loadFlights();
+                        // delay load
+                    }
+                } catch (error) {
+                    appendMessage("assistant", "⚠️ Đã xảy ra lỗi khi kết nối server.");
+                }
+            }
+
+
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const message = input.value.trim();
+                if (!message) return;
+                if (message) sendMessage(message);//+
+
+                // appendMessage("user", message);
+                // input.value = "";
+
+                // try {
+                //     const response = await fetch("/chat", {
+                //         method: "POST",
+                //         headers: { "Content-Type": "application/json" },
+                //         body: JSON.stringify({ message }),
+                //     });
+
+                //     const data = await response.json();
+                //     appendMessage("assistant", data.reply);
+                // } catch (error) {
+                //     appendMessage("assistant", "⚠️ Đã xảy ra lỗi khi kết nối server.");
+                // }
+            });
+        });
+
+    </script>
+</body>
+
+</html>

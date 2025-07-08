@@ -1,0 +1,20 @@
+[
+  {
+    "hang_bay": "VietJet Air",
+    "gio_khoi_hanh": "21:25",
+    "san_bay_di": "HAN",
+    "thoi_gian_bay": "1h 20m",
+    "gio_den": "22:45",
+    "san_bay_den": "DAD",
+    "gia": "1.734.444 VND/khách"
+  },
+  {
+    "hang_bay": "VietJet Air",
+    "gio_khoi_hanh": "22:00",
+    "san_bay_di": "HAN",
+    "thoi_gian_bay": "1h 20m",
+    "gio_den": "23:20",
+    "san_bay_den": "DAD",
+    "gia": "1.734.444 VND/khách"
+  }
+]
