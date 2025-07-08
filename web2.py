@@ -317,8 +317,9 @@ if have luggage option (if flight company offer baggage options) return notice i
 
             page.select_option('[aria-labelledby="nationality"] select', 'VN')
             cccd_box = page.locator('[aria-labelledby="travelerID.number"]')
-            cccd_box.click()
-            cccd_box.type(id_number)
+            if cccd_box.count() > 0:
+                cccd_box.click()
+                cccd_box.type(id_number)
             time.sleep(2)
             if page.locator('data-testid="view_flight_addons_widget_baggage"', has_text="Chọn"):
                 page.locator('[data-testid="view_flight_addons_widget_baggage"]')
@@ -331,8 +332,9 @@ if have luggage option (if flight company offer baggage options) return notice i
                 print(page)
                 time.sleep(2)
                 element = page.locator('div[dir="auto"][class="css-901oao r-13awgt0 r-uh8wd5 r-ubezar r-b88u0q r-135wba7 r-fdjqy7"][style="color: rgb(1, 148, 243);"]:has-text("Xem thêm")')
-                time.sleep(1)
-                element.click()
+                if element.count()>0:
+                    time.sleep(1)
+                    element.click()
                 text = 'there are all option of luggage: '
                 slct = page.locator('[aria-labelledby="baggageSelectionOptions"]')
                 text += slct.text_content()
