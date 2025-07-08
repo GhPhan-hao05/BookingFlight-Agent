@@ -320,17 +320,16 @@ if have luggage option (if flight company offer baggage options) return notice i
             if cccd_box.count() > 0:
                 cccd_box.click()
                 cccd_box.type(id_number)
-            time.sleep(2)
+            time.sleep(1)
             if page.locator('data-testid="view_flight_addons_widget_baggage"', has_text="Chọn"):
                 page.locator('[data-testid="view_flight_addons_widget_baggage"]')
                 time.sleep(2)
                 bt = page.locator('div[dir="auto"][class="css-901oao r-1yadl64 r-1vonz36 r-109y4c4 r-1cis278 r-1udh08x r-t60dpp r-u8s1d r-3s2u2q r-92ng3h"]:has-text("Chọn")').nth(0)
                 time.sleep(1)
                 bt.click()
-                time.sleep(3)
+                time.sleep(1)
                 page.locator('[data-testid="selectionModal.content"]').nth(0)
-                print(page)
-                time.sleep(2)
+                time.sleep(1)
                 element = page.locator('div[dir="auto"][class="css-901oao r-13awgt0 r-uh8wd5 r-ubezar r-b88u0q r-135wba7 r-fdjqy7"][style="color: rgb(1, 148, 243);"]:has-text("Xem thêm")')
                 if element.count()>0:
                     time.sleep(1)
@@ -342,7 +341,6 @@ if have luggage option (if flight company offer baggage options) return notice i
             else:
                 return page, 'insert personal informatin success, dont have luggage option, confirm booking'
         
-
         except Exception as e:
             return f"Error choose_seat_option: {str(e)}"
 
