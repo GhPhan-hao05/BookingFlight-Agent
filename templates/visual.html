@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic Mic Audio Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+
+        .container {
+            text-align: center;
+            position: relative;
+        }
+
+        .title {
+            color: #ffffff;
+            font-size: 1.5rem;
+            margin-bottom: 30px;
+            font-weight: normal;
+        }
+
+        .visualizer-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            margin: 0 auto 30px;
+        }
+
+        canvas {
+            background: #000000;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: 2px solid #ffffff;
+            border-radius: 0;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: normal;
+            transition: all 0.2s ease;
+            background: #000000;
+            color: #ffffff;
+        }
+
+        button:hover {
+            background: #ffffff;
+            color: #000000;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button:disabled:hover {
+            background: #000000;
+            color: #ffffff;
+        }
+
+        .status {
+            color: #ffffff;
+            margin-top: 20px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <nav>
+            <a href="{{ url_for('index') }}">TEXT</a>
+            <a href="{{ url_for('visual') }}">VOICE</a>
+        </nav>
+        <h1 class="title">STREAMING CHATBOT (English Only)</h1>
+
+        <div class="visualizer-container">
+            <canvas id="visualizer" width="400" height="400" class="glow"></canvas>
+        </div>
+
+        <div class="controls">
+            <button id="micOn" class="mic-on">Turn On Mic</button>
+            <button id="micOff" class="mic-off" disabled>Turn Off Mic</button>
+        </div>
+
+        <div class="status" id="status">Click "Turn On Mic" to start visualizing</div>
+    </div>
+
+    <script>
+        class MicAudioVisualizer {
+            constructor() {
+                this.canvas = document.getElementById('visualizer');
+                this.ctx = this.canvas.getContext('2d');
+                this.audioContext = null;
+                this.analyser = null;
+                this.dataArray = null;
+                this.isRecording = false;
+                this.stream = null;
+
+                this.centerX = this.canvas.width / 2;
+                this.centerY = this.canvas.height / 2;
+                this.baseRadius = 80;
+                this.maxRadius = 150;
+
+                this.setupEventListeners();
+                this.drawStaticGlobe();
+            }
+
+            setupEventListeners() {
+                document.getElementById('micOn').addEventListener('click', () => this.startMic());
+                document.getElementById('micOff').addEventListener('click', () => this.stopMic());
+            }
+
+            async startMic() {
+                try {
+                    // Check if getUserMedia is supported
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        throw new Error('getUserMedia not supported in this browser');
+                    }
+
+                    this.updateStatus('Requesting microphone access...');
+
+                    const response = fetch('/start-mic', { method: 'POST' });
+                    this.stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: false,
+                            noiseSuppression: false,
+                            autoGainControl: false
+                        }
+                    });
+                    this.setupAudioContext();
+                    this.isRecording = true;
+                    this.animate();
+                    this.updateUI();
+                    this.updateStatus('🔴 Micro đang được xử lý từ server...');
+                    this.canvas.classList.add('active');
+
+                } catch (error) {
+                    console.error('Error accessing microphone:', error);
+
+                    let errorMessage = 'Error: ';
+                    switch (error.name) {
+                        case 'NotAllowedError':
+                            errorMessage += 'Microphone access denied. Please allow microphone permission and try again.';
+                            break;
+                        case 'NotFoundError':
+                            errorMessage += 'No microphone found. Please check if a microphone is connected.';
+                            break;
+                        case 'NotSupportedError':
+                            errorMessage += 'Microphone not supported in this browser. Try Chrome, Firefox, or Edge.';
+                            break;
+                        case 'NotReadableError':
+                            errorMessage += 'Microphone is being used by another application.';
+                            break;
+                        case 'SecurityError':
+                            errorMessage += 'Security error. Make sure you\'re using HTTPS or localhost.';
+                            break;
+                        default:
+                            errorMessage += `Could not access microphone: ${error.message}`;
+                    }
+
+                    this.updateStatus(errorMessage);
+                    this.updateUI();
+                }
+            }
+
+            setupAudioContext() {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.analyser = this.audioContext.createAnalyser();
+                const source = this.audioContext.createMediaStreamSource(this.stream);
+                source.connect(this.analyser);
+
+                this.analyser.fftSize = 256;
+                const bufferLength = this.analyser.frequencyBinCount;
+                this.dataArray = new Uint8Array(bufferLength);
+            }
+
+            async stopMic() {
+                this.isRecording = false;
+                const response = await fetch('/end-mic', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.status === "recording stopped") {
+                    this.isRecording = false;
+                    this.drawStaticGlobe();
+                    this.updateUI();
+                    this.updateStatus('🛑 Mic đã tắt từ server.');
+                    this.canvas.classList.remove('active');
+                }
+            }
+
+            updateUI() {
+                document.getElementById('micOn').disabled = this.isRecording;
+                document.getElementById('micOff').disabled = !this.isRecording;
+            }
+
+            updateStatus(message) {
+                document.getElementById('status').textContent = message;
+            }
+
+            drawStaticGlobe() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                const gradient = this.ctx.createRadialGradient(
+                    this.centerX, this.centerY, 0,
+                    this.centerX, this.centerY, this.baseRadius
+                );
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                gradient.addColorStop(0.7, 'rgba(255, 255, 255, 1)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');
+
+                this.ctx.beginPath();
+                this.ctx.arc(this.centerX, this.centerY, this.baseRadius, 0, Math.PI * 2);
+                this.ctx.fillStyle = gradient;
+                this.ctx.fill();
+
+                for (let i = 1; i <= 2; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.centerX, this.centerY, this.baseRadius + i * 20, 0, Math.PI * 2);
+                    this.ctx.strokeStyle = `rgba(255, 255, 255, 1)`;
+                    this.ctx.lineWidth = 1;
+                    this.ctx.stroke();
+                }
+            }
+
+            animate() {
+                if (!this.isRecording) return;
+
+                this.animationId = requestAnimationFrame(() => this.animate());
+
+                if (this.analyser) {
+                    this.analyser.getByteFrequencyData(this.dataArray);
+                }
+
+                this.draw();
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                if (!this.dataArray) {
+                    this.drawStaticGlobe();
+                    return;
+                }
+
+                // Calculate average volume
+                let sum = 0;
+                for (let i = 0; i < this.dataArray.length; i++) {
+                    sum += this.dataArray[i];
+                }
+                const average = sum / this.dataArray.length;
+                const normalizedAverage = average / 255;
+
+                // Zoom scale based on volume (1.0 = normal size, 2.0 = double size)
+                const zoomScale = 1.0 + (normalizedAverage * 1.5);
+
+                // Save the current transformation matrix
+                this.ctx.save();
+
+                // Apply zoom transformation from center
+                this.ctx.translate(this.centerX, this.centerY);
+                this.ctx.scale(zoomScale, zoomScale);
+                this.ctx.translate(-this.centerX, -this.centerY);
+
+                // Dynamic radius (now will be scaled by zoom)
+                const dynamicRadius = this.baseRadius + (normalizedAverage * 60);
+
+                // Create gradient
+                const gradient = this.ctx.createRadialGradient(
+                    this.centerX, this.centerY, 0,
+                    this.centerX, this.centerY, dynamicRadius
+                );
+
+                const hue = (Date.now() * 0.1) % 360;
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+
+
+                // Draw main globe
+                this.ctx.beginPath();
+                this.ctx.arc(this.centerX, this.centerY, dynamicRadius, 0, Math.PI * 2);
+                this.ctx.fillStyle = gradient;
+                this.ctx.fill();
+
+
+                // Draw outer ring
+                this.ctx.beginPath();
+                this.ctx.arc(this.centerX, this.centerY, dynamicRadius + 25, 0, Math.PI * 2);
+                this.ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                // Restore the transformation matrix
+                this.ctx.restore();
+            }
+        }
+
+        // Initialize the visualizer
+        document.addEventListener('DOMContentLoaded', () => {
+            new MicAudioVisualizer();
+        });
+    </script>
+</body>
+
+</html>
