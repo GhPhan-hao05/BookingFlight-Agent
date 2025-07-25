@@ -4,6 +4,7 @@ import re
 from crewai import Crew, Task
 from datetime import datetime, timedelta
 from agent import booking_agent
+import requests
 
 
 
@@ -12,7 +13,7 @@ def do_booking(finalrequest):
         description=f"""{finalrequest}
         parse this input, use tools and do these step:
         (step 1) get input, understand (important: how much luggage the user has) and parse to get input for following step
-        (step 2) insert depart city, destination city and day depart the information is fixed in tool;
+        (step 2) insert depart - destination airport code (not city name) (HAN; SGN; DAN, ...) and day depart the information is fixed in tool;
         (step 3) filter flight by time and flight company (can filter with or without results), return note, result and seat options;
         (step 4) choose seat option best fit with user in cheapest price. let ignore the name of option, that not good for you, focus and think in price and luggage it offer
             Each seat option includes free carry-on luggage (usually 7kg or 10kg), and some include extra checked luggage.
@@ -24,7 +25,7 @@ def do_booking(finalrequest):
         Now decide: Does the user need more luggage capacity?
             If yes, select an extra luggage option.
             If no, choose option 1 (means no extra luggage).
-        ** just basically think think think in seat class how much capabilities (don't forget carry-on luggage capabilities) did you have and then how much you want in extra. 
+        ** just basically think in seat class how much capabilities (don't forget carry-on luggage capabilities) did you have and then how much you want in extra. 
         (step 6) if offer luggage option, do choose option 
         (step 7) go to payment page and done
         the tools need id of options, the id begin from 1, not 0
@@ -44,7 +45,8 @@ def do_booking(finalrequest):
     result = booking_crew.kickoff()
     return result
 
-def search_flight_inf(depart, destination, target_day, target_month, target_year, id_class, time_str, brand_str):
+
+def search_flight_info(depart, destination, target_day_d, target_month, target_year, id_class, time_str, brand_list):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False,
                                     args=[
@@ -97,7 +99,7 @@ def search_flight_inf(depart, destination, target_day, target_month, target_year
                 current_month =1
             page.click('[data-id="IcSystemChevronRight16"]')
 
-        selector = f'[data-testid="date-cell-{target_day}-{target_month}-{target_year}"]'
+        selector = f'[data-testid="date-cell-{target_day_d}-{target_month}-{target_year}"]'
         page.click(selector)
         serch = page.locator('text="Tìm chuyến bay"')
         serch.click()
@@ -134,17 +136,7 @@ def search_flight_inf(depart, destination, target_day, target_month, target_year
     #loc chuyen bay theo hang và lay gia re nhat
         for i in range(card_list.count()):
             card = card_list.nth(i)
-            lines = card.inner_text().strip().split('\n')
-            result = {
-                'hang_bay': lines[0].strip(),
-                'gio_khoi_hanh': lines[1].strip(),
-                'san_bay_di': lines[2].strip(),
-                'thoi_gian_bay': lines[3].strip(),
-                'gio_den': lines[5].strip(),
-                'san_bay_den': lines[6].strip(),
-                'gia': lines[7].strip()
-            }
-            #=======================
+
             if time_str != 'null':
                 times = card.locator('div[dir="auto"]', has_text=re.compile(r'\d{2}:\d{2}'))
                 if times.count() > 0:
@@ -152,18 +144,51 @@ def search_flight_inf(depart, destination, target_day, target_month, target_year
                     dep_time = datetime.strptime(depart_time, "%H:%M").time()
                     if (earliest_time > dep_time) or (dep_time > latest_time):
                         continue
-            time_constrain.append(result)
+            time_constrain.append(card.inner_text())
             #=======================
-            if brand_str != 'null':
-                if card.locator(f'text={brand_str}').count() == 0:
+            if len(brand_list) != 0:
+                if not any(card.locator(f"text={brand}").count() > 0 for brand in brand_list):
                     continue
-                brand_constrain.append(result) 
+                brand_constrain.append(card.inner_text()) 
 
 
         
         if (len(time_constrain) == 0) and (time_str != 'null'):
             return('i dont find any fight in time you want')
         if len(brand_constrain) == 0:
-            return('i dont find flight in brand you want but i find in list ZZZ have another brand')
+            return('i dont find flight in brand you want ')
     #chon chuyen bay re nhat
         return brand_constrain
+    
+
+
+
+def get_weather_inf(destination: str, day_depart: int, month_depart: int, year_depart: int) -> dict:
+
+    url = "http://api.weatherapi.com/v1/forecast.json"
+    params = {
+        "key": 'ad95d0db9f1849ef85630754242905',
+        "q": destination,
+        # Convert integers to strings before concatenating
+        "dt": str(year_depart)+'-'+str(month_depart)+'-'+str(day_depart),
+        "lang": "vi",
+        "days": 1
+    }
+    response = requests.get(url, params=params)
+
+    data = response.json()
+    forecast_day = data.get("forecast", {}).get("forecastday", [])[0]
+    all_hours = forecast_day["hour"]
+    target_hours = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
+
+    hourly_forecast = []
+    for h in all_hours:
+        hour = int(h["time"].split(" ")[1].split(":")[0])
+        if hour in target_hours:
+            hourly_forecast.append({
+                "time": h["time"].split(" ")[1], 
+                "temp": h["temp_c"],
+                "condition": h["condition"]["text"],
+            })
+
+    return hourly_forecast

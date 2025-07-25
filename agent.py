@@ -2,7 +2,8 @@ import os
 from web2 import *
 from crewai import Agent
 
-OPENAI_API_KEY  = os.environ["OPENAI_API_KEY"]= '[your_open_ai_api]'
+OPENAI_API_KEY  = os.environ["OPENAI_API_KEY"] = 'YOUR_OPENAI_API_KEY'  # Replace YOUR_API_KEY with your actual API key
+
 
 booking_agent = Agent(
     role="Booking specialist",

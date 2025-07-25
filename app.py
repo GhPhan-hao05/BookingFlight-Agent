@@ -1,153 +1,57 @@
-# from flask import Flask, render_template, request, jsonify, session
-# import openai
-# import json
-# import os
-# from tool import get_flight_options
-
-# client = openai.OpenAI(api_key='[your_openai_api]')
-# app = Flask(__name__)
-# app.secret_key = os.urandom(24)
-# global messages
-# messages = [
-#     {"role": "system", "content": "Bạn là một trợ lý du lịch có thể hỗ trợ tìm chuyến bay."},
-# ]
-# functions = [{
-#     "type": "function",
-#     "function": {
-#         "name": "get_flight_options",
-#         "description": "Lấy danh sách chuyến bay giữa 2 địa điểm",
-#         "parameters": {
-#             "type": "object",
-#             "properties": {
-#                 "departure": {"type": "string", "description": "Sân bay đi, ví dụ SGN",},
-#                 "destination": {"type": "string", "description": "Sân bay đến, ví dụ HAN",}
-#             },
-#             "required": ["departure", "destination"],
-#             "additionalProperties": False
-#         },
-#         "strict": True
-#     }
-# }]
-
-# @app.route("/")
-# def index():
-#     return render_template("index.html")
-
-# @app.route("/chat", methods=["POST"])
-# def chat():
-#     user_message = request.json.get("message", "")
-#     # messages = session.get("messages", [])
-#     messages.append({"role": "user", "content": user_message})
-
-#     response = client.chat.completions.create(
-#         model="gpt-4",
-#         messages=messages,
-#         tools=functions,
-#         tool_choice="auto",
-#     )
-
-#     msg = response.choices[0].message
-#     assistant_response = ""
-#     show_flights = False
-
-#     if msg.tool_calls:
-#         tool_call = msg.tool_calls[0] # Assuming only one tool call for simplicity
-#         function_name = tool_call.function.name
-#         arguments = json.loads(tool_call.function.arguments)
-#         if function_name == "get_flight_options":
-#             result = get_flight_options(
-#                 departure=arguments.get("departure"),
-#                 destination=arguments.get("destination"),
-#             )
-
-#             # Save result
-#             with open("static/flight_results.json", "w", encoding="utf-8") as f:
-#                 json.dump(result, f, ensure_ascii=False, indent=2)
-#             show_flights = True
-
-#             messages.append(msg)
-#             messages.append({
-#                 "tool_call_id": tool_call.id, # Include tool_call_id
-#                 "role": "tool", # Use 'tool' role
-#                 "name": function_name,
-#                 "content": json.dumps(result, ensure_ascii=False)
-#             })
-
-#             follow_up = client.chat.completions.create(
-#                 model="gpt-4",
-#                 messages=messages,
-#             )
-#             assistant_response = follow_up.choices[0].message.content
-#             messages.append({"role": "assistant", "content": assistant_response})
-#         else:
-#             assistant_response = "Không thể gọi hàm."
-#     else:
-#         assistant_response = msg.content
-#         messages.append({"role": "assistant", "content": assistant_response})
-
-
-#     return jsonify({"reply": assistant_response,
-#                     "show_flights": show_flights
-#                     })
-
-
-# if __name__ == "__main__":
-#     app.run(debug=True)
 
 
 
 from flask import Flask, render_template, request, jsonify
 from google import genai
-import json
 import os
 from tool import *
+from voice import *
 from google.genai import types
+from state import get_audio_chat
 
-api_key = '[your_gemini_api]' 
+api_key = 'YOUR_GEMINI_API_KEY' 
 
 client = genai.Client(api_key=api_key)
-
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
 # Messages lưu hội thoại
 global messages
-messages = [
-    types.Content(
-        role="user", parts=[types.Part(text="""
-                                       Bạn là nhà tư vấn chuyến bay.
-                                       (1) Đầu tiên bạn sẽ hỏi khách hàng các yêu cầu cơ bản của 1 chuyến bay bao gồm:
-                                       nơi đi, nơi đến, ngày bay, giờ bay(hh/mm), hãng bay, hạng ghế và khối lượng hành lý. Chú ý đối với hạng ghế chỉ chấp nhận 3 loại đó là phổ thông - economy, phổ thông đặc biệt - premium economy, và thương gia - business ứng với id là 0, 1, 2.
-                                       nếu người dùng mập mờ, không rõ ràng về ngày, giờ, hãng bay bạn hãy gợi ý cho họ, đừng để những thông tin này thiếu rõ ràng gây khó khăn, ngoài ra với những địa điểm khởi hành và điểm đích, nếu nơi đó không có sân bay bạn cũng phải nói cho họ
-                                       (2) Sau đó tìm thông tin các chuyến bay theo yêu cầu và cung cấp cho người dùng bao gồm hãng bay, nơi đi, nơi đến giờ bay ngày bay và giá.
-                                       (3) Sau khi người dùng chọn chuyến bay theo ý muốn, tiếp tục hỏi về các thông tin cá nhân gồm:
-                                       họ, đêm + tên, sđt, email, danh xưng (mr, ms, mrs), số id cá nhân, ngày tháng năm sinh (dd/mm/yyyy).
-                                       (4) Sau khi thu thập đủ, yêu cầu người dùng xác nhận lại thông tin.
-                                       (5)Sau khi thông tin được xác nhận và không còn chỉnh sửa, tạo một bảng tóm tắt về yêu cầu cũng như thông tin cá nhân.
-                                       Bản tóm tắt sẽ có dạng: "tìm chuyến bay từ A đến B vào ngày ... của hãng bay C, khởi hành lúc ... (hh:mm), và có ...kg hành lý
-                                       Thông tin cá nhân là:(các category này sẽ là tiếng anh nha) first name: Phan, last name: A Hảo, phone: 0357224, email:..., ..."
-                                       (6) Hỏi người dùng có muốn book chuyến bay không, nếu có thì tiến hành book.
-                                       Hãy chủ động trong việc hỏi đáp, gợi ý các yêu cầu xác nhận và booking nhé.""")]
-    )
-]
+messages = []
+system_prompt = """
+        Bạn là nhà tư vấn chuyến bay.
+        (1) Bạn sẽ hỏi khách hàng các yêu cầu cơ bản của 1 chuyến bay bao gồm:
+        nơi đi, nơi đến, ngày bay, giờ bay(hh/mm), hãng bay, hạng ghế và khối lượng hành lý. Chú ý hạng ghế chấp nhận 3 loại: phổ thông - economy, phổ thông đặc biệt - premium economy, và thương gia - business ứng với id là 0, 1, 2.
+        nếu người dùng không rõ ràng về ngày, giờ, hãng bay bạn hãy gợi ý cho họ, đừng để những thông tin này thiếu rõ ràng,
+        user cung cấp tên thành phố bạn phải ngầm biết (implicit)mã sân bay tại thành phố đó (Ví dụ: Đà Nẵng là DAN, Hà Nội là HAN, Hồ Chí Minh là SGN, ...). nếu nơi khởi hành và nơi đến đó không có sân bay bạn cũng phải thông báo và gợi ý sân bay gần đó nhất
+        (2) Bạn yêu cầu user xác nhận và tìm các chuyến bay theo yêu cầu và cung cấp cho người dùng bao gồm giá, hãng bay, nơi đi, nơi đến và giờ khởi hành.
+        (3) Sau khi người dùng chọn chuyến bay theo, tự động cung cấp thông tin thời tiết dự báo ở destination tại thời điểm hạ cánh (nếu thời tiết quá xấu thì gợi ý ngày giờ khác)
+        (4) Tiếp tục hỏi về các thông tin cá nhân:
+        họ, đêm + tên, sđt, email, danh xưng ( mr, ms, mrs), số id cá nhân, ngày tháng năm sinh (dd/mm/yyyy). họ đệm và tên không có dấu tiếng việt
+        (5) Sau khi thu thập đủ, yêu cầu người dùng xác nhận lại thông tin.
+        (6) Sau khi thông tin được xác nhận, tạo tóm tắt về yêu cầu và thông tin cá nhân.
+        Bản tóm tắt có dạng: "tìm chuyến bay từ A đến B (A B là mã sân bay - không phải tên thành phố) vào ngày ... của (các) hãng bay C, hạng ghế, khởi hành lúc ... (hh:mm), và có ...kg hành lý
+        Thông tin cá nhân là:(các category là tiếng anh) first name: Phan, last name: A Hao, phone: 0357224, email:..., ..."
+        (7) Hỏi người dùng có muốn book chuyến bay không, nếu có thì tiến hành book.
+        Hãy chủ động trong việc hỏi đáp, gợi ý các yêu cầu xác nhận và booking nhé."""
 
 
 get_flight = {
-            "name": "search_flight_inf",
+            "name": "search_flight_info",
             "description": "Tìm danh sách các chuyến bay dựa vào các thông tin đã cho",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "depart": {"type": "string", "description": "tên hoặc mã sân bay nơi khởi hành (ví dụ Đà Nẵng hoặc DAD)"},
-                    "destination": {"type": "string", "description": "tên hoặc mã sân bay của điểm đến (ví dụ Hà Nội hoặc HAN)"},
-                    "target_day": {"type": "integer", "description": "ngày khởi hành - chỉ có ngày thôi, ví dụ 12, 28"},
+                    "depart": {"type": "string", "description": "mã sân bay nơi khởi hành (DAD, HUI)"},
+                    "destination": {"type": "string", "description": "mã sân bay của điểm đến (SGN, HAN)"},
+                    "target_day_d": {"type": "integer", "description": "ngày khởi hành"},
                     "target_month": {"type": "integer", "description": "tháng khởi hành"},
                     "target_year": {"type": "integer", "description": "năm khởi hành"},
                     "id_class": {"type": "integer", "description": "id của hạng ghế. bắt đầu từ 0, 1, 2"},
                     "time_str": {"type": "string", "description": "thời gian khởi hành"},
-                    "brand_str": {"type": "string", "description": "tên của hãng bay"}
+                    "brand_list": {"type": "array", "items": {"type": "string"}, "description": "tên của các hãng bay"}
                 },
-                "required": ["depart", "destination", "target_day", "target_month", "target_year", "id_class", "time_str", "brand_str"]
+                "required": ["depart", "destination", "target_day_d", "target_month", "target_year", "id_class", "time_str", "brand_list"]
             }
         }
 
@@ -157,23 +61,46 @@ booking = {
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "finalrequest": {"type": "string", "description": "các thoonng tin yêu cầu của chuyến bay và thông tin cá nhân người dùng"},
+                    "finalrequest": {"type": "string", "description": "các thông tin yêu cầu của chuyến bay và thông tin cá nhân người dùng"},
                 },
                 "required": ["finalrequest"]
             }
         }
 
-tools = types.Tool(function_declarations=[get_flight, booking])
-config = types.GenerateContentConfig(tools=[tools])
+weather_inf = {
+            "name": "get_weather_inf",
+            "description": "cung cấp thông tin về thời tiết tại điểm đến của chuyến bay theo ngày tháng năm khởi hành",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "destination": {"type": "string", "description": "điểm đến của chuyến bay, nơi cần kiểm tra thời tiết"},
+                    "day_depart": {"type": "integer", "description": "ngày"},
+                    "month_depart": {"type": "integer", "description": "tháng"},
+                    "year_depart": {"type": "integer", "description": "năm"},
+                },
+                "required": ["destination", "day_depart", "month_depart", "year_depart"]
+            }
+        }
+
+tools = types.Tool(function_declarations=[get_flight, weather_inf, booking])
+config = types.GenerateContentConfig(tools = [tools],
+                                     system_instruction = system_prompt
+                                    )
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
+@app.route("/visual")
+def visual():
+    return render_template("visual.html")
+
 @app.route("/chat", methods=["POST"])
 def chat():
-    user_message = request.json.get("message", "")
-    messages.append(types.Content(role = "user", parts=[types.Part(text=user_message)]))
+    user_input = request.json.get("message")
+    if not user_input:
+        return jsonify({"error": "Missing 'message' parameter"}), 400
+    messages.append(types.Content(role = "user", parts=[types.Part(text=user_input)]))
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -188,27 +115,25 @@ def chat():
         tool_call = reply_part.function_call
         function_name = tool_call.name
         args = tool_call.args
+        print(args)
 
-        if function_name == "search_flight_inf":
-            result = search_flight_inf(
+        if function_name == "search_flight_info":
+            result = search_flight_info(
                 depart = args.get("depart"),
                 destination = args.get("destination"),
-                target_day = args.get("target_day"),
+                target_day_d = args.get("target_day_d"),
                 target_month = args.get("target_month"),
                 target_year = args.get("target_year"),
                 id_class = args.get("id_class"),
                 time_str = args.get("time_str"),
-                brand_str = args.get("brand_str")
+                brand_list = args.get("brand_list")
             )
-
-            with open("static/flight_results.json", "w", encoding="utf-8") as f:
-                json.dump(result, f, ensure_ascii=False, indent=2)
-            show_flights = True
 
             function_response_part = types.Part.from_function_response(
                 name=tool_call.name,
                 response={"result": result},
             )
+            ####thêm code chuyển json
             
 
             messages.append(response.candidates[0].content)
@@ -221,6 +146,29 @@ def chat():
                 )
             assistant_response = final_response.text
             messages.append(types.Content(role = "model", parts=[types.Part(text=assistant_response)]))
+
+        elif function_name == "get_weather_inf": 
+            result = get_weather_inf(
+                destination = args.get("destination"),
+                day_depart = args.get("day_depart"),
+                month_depart = args.get("month_depart"),
+                year_depart = args.get("year_depart")
+            )
+
+            function_response_part = types.Part.from_function_response(
+                name=tool_call.name,
+                response={"result": result},
+            )
+            messages.append(response.candidates[0].content)
+            messages.append(types.Content(role="tool", parts=[function_response_part]))
+
+            final_response  = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents = messages,
+                config=config
+                )
+            assistant_response = final_response.text
+            messages.append(types.Content(role = "model", parts=[types.Part(text=assistant_response)])) 
         elif function_name == "do_booking": 
             result = do_booking(
                 finalrequest = args.get("finalrequest"),
@@ -252,6 +200,26 @@ def chat():
         "reply": assistant_response,
         "show_flights": show_flights
     })
+
+async def start_voice_chat():
+    audio_chat = await get_audio_chat()
+    audio_chat.start_recording()
+    audio_chat.stop_put = False
+    # Keep running
+    while True:
+        await asyncio.sleep(1)
+
+@app.route("/start-mic", methods=["POST"])
+def start_mic():
+    asyncio.run(start_voice_chat())
+    
+        
+@app.route("/end-mic", methods=["POST"])
+async def end_mic():
+    audio_chat = await get_audio_chat()
+    audio_chat.stop_put = True
+    return jsonify({"status": "recording stopped"})
+
 
 if __name__ == "__main__":
     app.run(debug=True)
