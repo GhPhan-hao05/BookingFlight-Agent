@@ -4,7 +4,7 @@
 from flask import Flask, render_template, request, jsonify
 from google import genai
 import os
-from tool import *
+import tool
 from voice import *
 from google.genai import types
 from state import get_audio_chat
@@ -118,7 +118,7 @@ def chat():
         print(args)
 
         if function_name == "search_flight_info":
-            result = search_flight_info(
+            result = tool.search_flight_info(
                 depart = args.get("depart"),
                 destination = args.get("destination"),
                 target_day_d = args.get("target_day_d"),
@@ -148,7 +148,7 @@ def chat():
             messages.append(types.Content(role = "model", parts=[types.Part(text=assistant_response)]))
 
         elif function_name == "get_weather_inf": 
-            result = get_weather_inf(
+            result = tool.get_weather_inf(
                 destination = args.get("destination"),
                 day_depart = args.get("day_depart"),
                 month_depart = args.get("month_depart"),
@@ -170,7 +170,7 @@ def chat():
             assistant_response = final_response.text
             messages.append(types.Content(role = "model", parts=[types.Part(text=assistant_response)])) 
         elif function_name == "do_booking": 
-            result = do_booking(
+            result = tool.do_booking(
                 finalrequest = args.get("finalrequest"),
             )
 
