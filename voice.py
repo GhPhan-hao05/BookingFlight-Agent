@@ -128,6 +128,7 @@ class GeminiLiveAudio:
         self.session = None
         self.endturn = False
         self.stop_put = False
+        self.mic_on= True
         
         self.audio_queue = asyncio.Queue()
         self.playback_queue = asyncio.Queue()
@@ -173,10 +174,12 @@ class GeminiLiveAudio:
                 self.stop_put = False
                 self.audio_queue = asyncio.Queue()
                 self.playback_queue = asyncio.Queue()
-                send_task = asyncio.create_task(self._process_audio())
-                receive_task = asyncio.create_task(self._listen_for_gemini_responses())
-                playback_task = asyncio.create_task(self._handle_playback())
-                await asyncio.gather(send_task, receive_task, playback_task)
+                if self.mic_on:
+                    send_task = asyncio.create_task(self._process_audio())
+                    receive_task = asyncio.create_task(self._listen_for_gemini_responses())
+                    playback_task = asyncio.create_task(self._handle_playback())
+                    
+                    await asyncio.gather(send_task, receive_task, playback_task)
         return
 
     def update_status(self, msg: str):
@@ -396,4 +399,5 @@ class GeminiLiveAudio:
 
 
   
+
 # asyncio.run(main())
