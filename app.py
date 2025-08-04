@@ -203,8 +203,8 @@ def chat():
 
 async def start_voice_chat():
     audio_chat = await get_audio_chat()
+    audio_chat.mic_on = True
     audio_chat.start_recording()
-    audio_chat.stop_put = False
     # Keep running
     while True:
         await asyncio.sleep(1)
@@ -217,9 +217,10 @@ def start_mic():
 @app.route("/end-mic", methods=["POST"])
 async def end_mic():
     audio_chat = await get_audio_chat()
-    audio_chat.stop_put = True
+    audio_chat.mic_on = False
     return jsonify({"status": "recording stopped"})
 
 
 if __name__ == "__main__":
     app.run(debug=True)
+
